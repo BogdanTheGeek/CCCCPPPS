@@ -43,7 +43,6 @@
 // Module static variables
 //------------------------------------------------------------------------------
 static volatile uint32_t s_systickCount = 0;
-static volatile uint8_t printBuffer[64] = {0};
 static RingBuffer_t printRingBuffer = {0};
 
 //------------------------------------------------------------------------------
@@ -72,9 +71,13 @@ int main(void)
 
     SysTick_Init();
 
+#ifdef CONFIG_USE_USB
+    static volatile uint8_t printBuffer[64] = {0};
     (void)RingBuffer_Init(&printRingBuffer, (uint8_t *)printBuffer, array_size(printBuffer));
+    usb_setup();
+#endif
+
     LOG_Init(eLOG_LEVEL_DEBUG, (uint32_t *)&s_systickCount);
-    // usb_setup();
 
     BoostPWM_Init();
 
@@ -201,20 +204,20 @@ int _write(int fd, const char *buf, int size)
  */
 static void SysTick_Init(void)
 {
-    /* disable default SysTick behavior */
+    // Disable default SysTick behavior
     SysTick->CTLR = 0;
 
-    /* enable the SysTick IRQ */
+    // Enable the SysTick IRQ
     NVIC_EnableIRQ(SysTicK_IRQn);
 
-    /* Set the tick interval to 1ms for normal op */
+    // Set the tick interval to 1ms for normal op
     SysTick->CMP = (FUNCONF_SYSTEM_CORE_CLOCK / 1000) - 1;
 
-    /* Start at zero */
+    // Start at zero
     SysTick->CNT = 0;
     s_systickCount = 0;
 
-    /* Enable SysTick counter, IRQ, HCLK/1 */
+    // Enable SysTick counter, IRQ, HCLK/1
     SysTick->CTLR = SYSTICK_CTLR_STE | SYSTICK_CTLR_STIE | SYSTICK_CTLR_STCLK;
 }
 
@@ -254,16 +257,13 @@ static void WDT_Pet(void)
 void SysTick_Handler(void) __attribute__((interrupt));
 void SysTick_Handler(void)
 {
-    // move the compare further ahead in time.
-    // as a warning, if more than this length of time
-    // passes before triggering, you may miss your
-    // interrupt.
+    // Set the next interrupt to be in 1/1000th of a second
     SysTick->CMP += (FUNCONF_SYSTEM_CORE_CLOCK / 1000);
 
-    // clear IRQ
+    // Clear IRQ
     SysTick->SR = 0;
 
-    // update counter
+    // Update counter
     s_systickCount++;
 }
 

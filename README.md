@@ -7,7 +7,8 @@
 This interface is enabled by default when building the firmware
 ## USB Interface:
 Build with `-DCONFIG_USE_USB`
-> [!NOTE] To be implemented.
+> [!NOTE]
+> To be implemented.
 
 ## Commands
  - `0` to turn the supply off

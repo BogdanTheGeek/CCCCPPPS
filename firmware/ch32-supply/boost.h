@@ -34,6 +34,7 @@ void BoostPWM_SetVoltageTarget(uint32_t millivolts);
 void BoostPWM_SetCurrentLimit(uint32_t milliamps);
 uint32_t BoostPWM_GetVoltageMillivolts(void);
 uint32_t BoostPWM_GetCurrentMilliamps(void);
+uint8_t BoostPWM_GetDuty(void);
 
 //------------------------------------------------------------------------------
 // Module exported variables

@@ -29,6 +29,25 @@
 #define Rin 100
 #define Rt  (Rf + Rin)
 
+#define INTERNAL_VREF 1200
+#define ADC_RESOLUTION 10
+#define ADC_MAX (1 << ADC_RESOLUTION)
+
+#define MIN_DUTY 0
+#define MAX_DUTY 250
+
+// PID terms
+#define KP(eP) ((eP) >> 0)
+#define KD(eD) ((eD) >> 3)
+#define KI(eI) ((eI) >> 6)
+
+#ifndef min
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#endif
+#ifndef max
+#define max(a, b) (((a) > (b)) ? (a) : (b))
+#endif
+
 //------------------------------------------------------------------------------
 // External variables
 //------------------------------------------------------------------------------
@@ -60,12 +79,13 @@ static uint32_t GetVoltageMillivolts(void);
 static uint16_t MillivoltsToADC(uint32_t millivolts);
 static uint32_t GetCurrentMilliamps(void);
 static uint16_t MilliampsToADC(uint32_t milliamps);
+
 static void SetupOpAmp(void);
 static void SetupADC(void);
+
 static void BoostControllerPID(void);
 static void SetDuty(uint8_t duty);
-static uint16_t ConstantVoltageAlgorithm(void);
-static uint16_t ConstantCurrentAlgorithm(void);
+
 static void Calibrate(void);
 
 //------------------------------------------------------------------------------
@@ -78,7 +98,6 @@ static void Calibrate(void);
  */
 void BoostPWM_Init(void)
 {
-
     SetupOpAmp();
 
     SetupADC();
@@ -188,6 +207,16 @@ uint32_t BoostPWM_GetCurrentMilliamps(void)
 }
 
 /**
+ * @brief  Get the current duty cycle of the boost converter
+ * @param  None
+ * @return The duty cycle (0-255)
+ */
+uint8_t BoostPWM_GetDuty(void)
+{
+    return s_pwmDuty;
+}
+
+/**
  * @brief  ADC1 IRQ Handler
  * @param  None
  * @return None
@@ -217,7 +246,7 @@ void ADC1_IRQHandler(void)
  */
 static uint32_t GetVRefMillivolts(void)
 {
-    return 1200 * 1024 / s_vref;
+    return (INTERNAL_VREF * ADC_MAX) / s_vref;
 }
 
 /**
@@ -228,7 +257,7 @@ static uint32_t GetVRefMillivolts(void)
 static uint32_t GetVoltageMillivolts(void)
 {
     const uint32_t vref = GetVRefMillivolts();
-    return (s_feedbackVRaw * vref * Rt) / (Rin * 1024);
+    return (s_feedbackVRaw * vref * Rt) / (Rin * ADC_MAX);
 }
 
 /**
@@ -238,7 +267,7 @@ static uint32_t GetVoltageMillivolts(void)
  */
 static uint16_t MillivoltsToADC(uint32_t millivolts)
 {
-    return (millivolts * 1024 * Rin) / (Rt * GetVRefMillivolts());
+    return (millivolts * ADC_MAX * Rin) / (Rt * GetVRefMillivolts());
 }
 
 /**
@@ -350,27 +379,37 @@ static void SetupOpAmp(void)
  * @brief  Boost controller PID algorithm
  * @param  None
  * @return None
+ * @note   eP = P error, eI = I error, eD = D error
  */
 static void BoostControllerPID(void)
 {
+    static int lastEP = 0;
+    static int eI = 0;
 
-    uint16_t duty = 0;
+    // Skip if the target is 0
+    if (s_targetVRaw == 0 || s_targetIRaw == 0)
+    {
+        // Reset the algorithm
+        lastEP = 0;
+        eI = 0;
+        SetDuty(0);
+        return;
+    }
 
-    if (s_targetIRaw > 0 && s_targetVRaw > 0)
-    {
-        duty = ConstantCurrentAlgorithm();
-    }
-    else if (s_targetVRaw > 0)
-    {
-        duty = ConstantVoltageAlgorithm();
-        (void)ConstantCurrentAlgorithm();
-    }
-    else
-    {
-        // Run both algorithms to keep the integrators in check
-        (void)ConstantVoltageAlgorithm();
-        (void)ConstantCurrentAlgorithm();
-    }
+    // Calculate the voltage and current errors
+    const int ePv = s_targetVRaw - s_feedbackVRaw;
+    const int ePi = s_targetIRaw - s_feedbackIRaw;
+
+    // Picking the smallest error gives current or voltage limiting
+    const int eP = min(ePv, ePi);
+    const int eD = eP - lastEP;
+    eI += eP;
+
+    int duty = KP(eP) + KD(eD) + KI(eI);
+
+    // Limit the duty cycle for safety
+    duty = max(duty, MIN_DUTY);
+    duty = min(duty, MAX_DUTY);
 
     SetDuty(duty);
 }
@@ -383,62 +422,6 @@ static void BoostControllerPID(void)
 static void SetDuty(uint8_t duty)
 {
     TIM1->CH3CVR = s_pwmDuty = duty;
-}
-
-/**
- * @brief  Constant voltage algorithm
- * @param  None
- * @return Duty cycle
- */
-static uint16_t ConstantVoltageAlgorithm(void)
-{
-    static int lastVErr = 0;
-    static int vErrI = 0;
-
-    if (s_targetVRaw == 0)
-    {
-        lastVErr = 0;
-        vErrI = 0;
-        return 0;
-    }
-
-    const int vErr = s_targetVRaw - s_feedbackVRaw;
-    const int vErrD = vErr - lastVErr;
-    vErrI += vErr;
-
-    int duty = (vErr >> 0) + (vErrD >> 3) + (vErrI >> 6);
-    duty = (duty < 0) ? 0 : duty;
-    duty = (duty > 250) ? 250 : duty;
-
-    return duty;
-}
-
-/**
- * @brief  Constant current algorithm
- * @param  None
- * @return Duty cycle
- */
-static uint16_t ConstantCurrentAlgorithm(void)
-{
-    static int lastIErr = 0;
-    static int iErrI = 0;
-
-    if (s_targetIRaw == 0)
-    {
-        lastIErr = 0;
-        iErrI = 0;
-        return 0;
-    }
-
-    const int iErr = s_targetIRaw - s_feedbackIRaw;
-    const int iErrD = iErr - lastIErr;
-    iErrI += iErr;
-
-    int duty = (iErr >> 0) + (iErrD >> 3) + (iErrI >> 6);
-    duty = (duty < 0) ? 0 : duty;
-    duty = (duty > 250) ? 250 : duty;
-
-    return duty;
 }
 
 /**

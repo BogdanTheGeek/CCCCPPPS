@@ -26,6 +26,10 @@
 
 #define TAG "main"
 
+#ifndef CONFIG_CURRENT_LIMIT
+#define CONFIG_CURRENT_LIMIT 1000
+#endif
+
 #define array_size(x) (sizeof(x) / sizeof(x[0]))
 //------------------------------------------------------------------------------
 // External variables
@@ -96,9 +100,13 @@ int main(void)
     static uint32_t voltage = 0;
     static uint32_t current = 0;
     static uint32_t power = 0;
+    static uint8_t duty = 0;
     static uint32_t voltageTarget = 0;
-    static uint32_t currentLimit = 0;
+    static uint32_t currentLimit = CONFIG_CURRENT_LIMIT;
     static bool ccMode = false;
+
+    BoostPWM_SetVoltageTarget(voltageTarget);
+    BoostPWM_SetCurrentLimit(currentLimit);
 
     while (1)
     {
@@ -110,9 +118,9 @@ int main(void)
         {
             case '0':
                 BoostPWM_SetVoltageTarget(0);
-                BoostPWM_SetCurrentLimit(0);
+                BoostPWM_SetCurrentLimit(CONFIG_CURRENT_LIMIT);
                 voltageTarget = 0;
-                currentLimit = 0;
+                currentLimit = CONFIG_CURRENT_LIMIT;
                 break;
             case '+':
             case '=':
@@ -142,20 +150,21 @@ int main(void)
             case -1:
                 voltage = BoostPWM_GetVoltageMillivolts();
                 current = BoostPWM_GetCurrentMilliamps();
+                current = ((int)current < 0) ? 0 : current;
+                duty = BoostPWM_GetDuty();
                 power = voltage * current;
-                LOGI(TAG, "CC: %d, Voltage: %dmV, Current: %dmA, Power: %dmW",
+                LOGI(TAG, "CC: %d, Voltage: %5dmV, Current: %4dmA, Power: %5dmW, Duty: %3d",
                      ccMode,
                      voltage,
                      current,
-                     power / 1000);
+                     power / 1000,
+                     duty);
                 break;
             case 'c':
                 ccMode = true;
                 break;
             case 'v':
                 ccMode = false;
-                currentLimit = 0;
-                BoostPWM_SetCurrentLimit(0);
                 break;
             default:
                 if (c <= '0' || c > '9') break;

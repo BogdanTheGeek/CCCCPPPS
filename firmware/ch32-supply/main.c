@@ -14,7 +14,6 @@
 #include <inttypes.h>
 #include <stdbool.h>
 
-#include "RingBuffer.h"
 #include "boost.h"
 #include "ch32v003fun.h"
 #include "log.h"
@@ -42,12 +41,39 @@
 //------------------------------------------------------------------------------
 // Module type definitions
 //------------------------------------------------------------------------------
+typedef struct __attribute__((packed))
+{
+    uint32_t voltage;
+    uint32_t current;
+    uint32_t power;
+    uint8_t duty;
+    bool ccMode;
+} BoostState_t;
+
+typedef struct __attribute__((packed))
+{
+    uint32_t voltage;
+    uint32_t current;
+} Command_t;
 
 //------------------------------------------------------------------------------
 // Module static variables
 //------------------------------------------------------------------------------
 static volatile uint32_t s_systickCount = 0;
-static RingBuffer_t printRingBuffer = {0};
+static volatile uint8_t scratch[32];
+
+static size_t s_bytesReceived = 0;
+static Command_t s_command = {
+    .voltage = 0,
+    .current = CONFIG_CURRENT_LIMIT,
+};
+static BoostState_t s_state = {
+    .voltage = 0,
+    .current = CONFIG_CURRENT_LIMIT,
+    .power = 0,
+    .duty = 0,
+    .ccMode = false,
+};
 
 //------------------------------------------------------------------------------
 // Module static function prototypes
@@ -69,19 +95,20 @@ int main(void)
 {
     SystemInit();
 
-#if FUNCONF_USE_DEBUGPRINTF
-    WaitForDebuggerToAttach();
-#endif
-
     SysTick_Init();
 
+    if (WaitForDebuggerToAttach(1000))
+    {
+        LOG_Init(eLOG_LEVEL_NONE, (uint32_t *)&s_systickCount);
+    }
+    else
+    {
+        LOG_Init(eLOG_LEVEL_INFO, (uint32_t *)&s_systickCount);
+    }
+
 #ifdef CONFIG_USE_USB
-    static volatile uint8_t printBuffer[64] = {0};
-    (void)RingBuffer_Init(&printRingBuffer, (uint8_t *)printBuffer, array_size(printBuffer));
     usb_setup();
 #endif
-
-    LOG_Init(eLOG_LEVEL_DEBUG, (uint32_t *)&s_systickCount);
 
     BoostPWM_Init();
 
@@ -97,13 +124,12 @@ int main(void)
 
     WDT_Init(0x0FFF, IWDG_Prescaler_128);
 
-    static uint32_t voltage = 0;
-    static uint32_t current = 0;
-    static uint32_t power = 0;
-    static uint8_t duty = 0;
     static uint32_t voltageTarget = 0;
     static uint32_t currentLimit = CONFIG_CURRENT_LIMIT;
-    static bool ccMode = false;
+
+    static size_t s_lastBytesReceived = 0;
+
+    static uint32_t lastTime = 0;
 
     BoostPWM_SetVoltageTarget(voltageTarget);
     BoostPWM_SetCurrentLimit(currentLimit);
@@ -112,6 +138,7 @@ int main(void)
     {
         WDT_Pet();
 
+#if 0
         int c = getchar();
 
         switch (c)
@@ -124,7 +151,7 @@ int main(void)
                 break;
             case '+':
             case '=':
-                if (ccMode)
+                if (s_state.ccMode)
                 {
                     currentLimit += 25;
                     BoostPWM_SetCurrentLimit(currentLimit);
@@ -136,7 +163,7 @@ int main(void)
                 }
                 break;
             case '-':
-                if (ccMode)
+                if (s_state.ccMode)
                 {
                     currentLimit -= 25;
                     BoostPWM_SetCurrentLimit(currentLimit);
@@ -148,27 +175,27 @@ int main(void)
                 }
                 break;
             case -1:
-                voltage = BoostPWM_GetVoltageMillivolts();
-                current = BoostPWM_GetCurrentMilliamps();
-                current = ((int)current < 0) ? 0 : current;
-                duty = BoostPWM_GetDuty();
-                power = voltage * current;
+                s_state.voltage = BoostPWM_GetVoltageMillivolts();
+                s_state.current = BoostPWM_GetCurrentMilliamps();
+                s_state.current = ((int)s_state.current < 0) ? 0 : s_state.current;
+                s_state.duty = BoostPWM_GetDuty();
+                s_state.power = (s_state.voltage * s_state.current) / 1000;
                 LOGI(TAG, "CC: %d, Voltage: %5dmV, Current: %4dmA, Power: %5dmW, Duty: %3d",
-                     ccMode,
-                     voltage,
-                     current,
-                     power / 1000,
-                     duty);
+                     s_state.ccMode,
+                     s_state.voltage,
+                     s_state.current,
+                     s_state.power,
+                     s_state.duty);
                 break;
             case 'c':
-                ccMode = true;
+                s_state.ccMode = true;
                 break;
             case 'v':
-                ccMode = false;
+                s_state.ccMode = false;
                 break;
             default:
                 if (c <= '0' || c > '9') break;
-                if (ccMode)
+                if (s_state.ccMode)
                 {
                     currentLimit = (c - '0') * 100;
                     BoostPWM_SetCurrentLimit(currentLimit);
@@ -180,27 +207,41 @@ int main(void)
                 }
                 break;
         }
-
         Delay_Ms(100);
+#endif
+
+        // TODO: make this part of the boost driver to avoid the copy
+        s_state.voltage = BoostPWM_GetVoltageMillivolts();
+        s_state.current = BoostPWM_GetCurrentMilliamps();
+        if (s_state.current < 0)
+        {
+            s_state.current = 0;
+        }
+        s_state.power = (s_state.voltage * s_state.current) / 1000;
+        s_state.duty = BoostPWM_GetDuty();
+
+        if (s_bytesReceived != s_lastBytesReceived)
+        {
+            LOGD(TAG, "Received %d bytes", s_bytesReceived - s_lastBytesReceived);
+            LOGI(TAG, "Setting Voltage: %dmV, Current: %dmA", s_command.voltage, s_command.current);
+
+            BoostPWM_SetVoltageTarget(s_command.voltage);
+            BoostPWM_SetCurrentLimit(s_command.current);
+            s_lastBytesReceived = s_bytesReceived;
+        }
+
+        if (s_systickCount - lastTime > 1000)
+        {
+            lastTime = s_systickCount;
+            LOGI(TAG, "CC: %d, Voltage: %5dmV, Current: %4dmA, Power: %5dmW, Duty: %3d",
+                 s_state.ccMode,
+                 s_state.voltage,
+                 s_state.current,
+                 s_state.power,
+                 s_state.duty);
+        }
     }
 }
-
-#if !FUNCONF_USE_DEBUGPRINTF
-
-/**
- * @brief  Write string to console
- * @param      fd - the file descriptor(ignored)
- * @param[in]  buf - the buffer
- * @param      size - buffer size in bytes
- * @return the number of bytes written
- */
-int _write(int fd, const char *buf, int size)
-{
-    (void)fd;
-    (void)RingBuffer_Put(&printRingBuffer, (uint8_t *)buf, size);
-    return size;
-}
-#endif
 
 //------------------------------------------------------------------------------
 // Module static functions
@@ -288,20 +329,7 @@ void SysTick_Handler(void)
  */
 void usb_handle_user_in_request(struct usb_endpoint *e, uint8_t *scratchpad, int endp, uint32_t sendtok, struct rv003usb_internal *ist)
 {
-    if (endp == 3)
-    {
-        size_t bytes = RingBuffer_Peek(&printRingBuffer);
-        if (bytes > 7)
-        {
-            static uint8_t c[8];
-            if (eRING_BUFFER_STATUS_SUCCESS == RingBuffer_Get(&printRingBuffer, c, 8, &bytes))
-            {
-                usb_send_data(c, 8, 0, sendtok);
-                return;
-            }
-        }
-    }
-    // If it's a control transfer, don't send anything.
+    // Make sure we only deal with control messages. Like get/set feature reports.
     usb_send_empty(sendtok);
 }
 
@@ -315,7 +343,7 @@ void usb_handle_user_in_request(struct usb_endpoint *e, uint8_t *scratchpad, int
 void usb_handle_other_control_message(struct usb_endpoint *e, struct usb_urb *s, struct rv003usb_internal *ist)
 {
     LogUEvent(SysTick->CNT, s->wRequestTypeLSBRequestMSB, s->lValueLSBIndexMSB, s->wLength);
-    e->opaque = (uint8_t *)1;
+    // e->opaque = (uint8_t *)1;
 }
 
 /**
@@ -329,8 +357,64 @@ void usb_handle_other_control_message(struct usb_endpoint *e, struct usb_urb *s,
  */
 void usb_handle_user_data(struct usb_endpoint *e, int current_endpoint, uint8_t *data, int len, struct rv003usb_internal *ist)
 {
-    LogUEvent(SysTick->CNT, 0xffffffff, current_endpoint, len);
-    printf("Got %d bytes\r\n", len);
+    int offset = e->count << 3;
+    int torx = e->max_len - offset;
+    if (torx > len) torx = len;
+#if 0
+	if( torx > 0 )
+	{
+		memcpy( scratch + offset, data, torx );
+		e->count++;
+
+      s_bytesReceived += torx;
+	}
+#else
+    if (len == 5)
+    {
+        const uint8_t cmd = data[0];
+        switch (cmd)
+        {
+            case 1:
+                s_command.voltage = *(uint32_t *)(data + 1);
+                break;
+            case 2:
+                s_command.current = *(uint32_t *)(data + 1);
+                break;
+        }
+
+        e->count++;
+        s_bytesReceived += len;
+    }
+#endif
+}
+
+void usb_handle_hid_get_report_start(struct usb_endpoint *e, int reqLen, uint32_t lValueLSBIndexMSB)
+{
+    if (reqLen > sizeof(scratch)) reqLen = sizeof(scratch);
+
+    // You can check the lValueLSBIndexMSB word to decide what you want to do here
+    // But, whatever you point this at will be returned back to the host PC where
+    // it calls hid_get_feature_report.
+    //
+    // Please note, that on some systems, for this to work, your return length must
+    // match the length defined in HID_REPORT_COUNT, in your HID report, in usb_config.h
+
+    e->opaque = (void *)&s_state;
+    e->max_len = reqLen;
+}
+
+void usb_handle_hid_set_report_start(struct usb_endpoint *e, int reqLen, uint32_t lValueLSBIndexMSB)
+{
+    // Here is where you get an alert when the host PC calls hid_send_feature_report.
+    //
+    // You can handle the appropriate message here.  Please note that in this
+    // example, the data is chunked into groups-of-8-bytes.
+    //
+    // Note that you may need to make this match HID_REPORT_COUNT, in your HID
+    // report, in usb_config.h
+
+    if (reqLen > sizeof(scratch)) reqLen = sizeof(scratch);
+    e->max_len = reqLen;
 }
 
 static uint8_t newByte = 0;

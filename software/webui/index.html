@@ -1,0 +1,129 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+   <link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon">
+   <link rel="stylesheet" type="text/css" href="style.css">
+   <meta charset="UTF-8">
+   <script src="Chart.bundle.min.js"></script>
+   <!-- <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> -->
+   <script src="script.js"></script>
+
+<body onload="onLoad()">
+   <table>
+      <tr>
+         <td><input type="submit" class="button" style="width:auto" onClick="reqConnect()" value="Open Device" id=connectButton></td>
+         <td>
+            <div id=STATUS></div>
+         </td>
+      </tr>
+   </table>
+   <div id="StatusPerf"></div>
+   <div id="Status"></div>
+
+   <div class="tab">
+      <button class="tl active" onclick="switchTab(event,'TabMain')">Main</button>
+      <button class="tl" onclick="switchTab(event,'TabLive')">Live</button>
+      <button class="tl" onclick="switchTab(event,'TabUpdate')">Update</button>
+   </div>
+
+   <div id="TabMain" class="tc" style="display: grid">
+      <form>
+         <table>
+            <tr style="color: #4934ec">
+               <td class="big_info" id="VoltageBig"></td>
+               <td>mV</td>
+            </tr>
+            <tr style="color: #ecc734">
+               <td class="big_info" id="CurrentBig"></td>
+               <td>mA</td>
+            </tr>
+            <tr style="color: #ec6b34">
+               <td class="big_info" id="PowerBig"></td>
+               <td>mW</td>
+            </tr>
+
+            <tr style="color: #4934ec">
+               <td><input type="number" min="0" max="15000" step="100" value="1000" class="big_info"
+                     id="SetVoltage"></td>
+               <td><input type="button" onclick="sendVoltage()" class="button" value="Set Voltage"></td>
+            </tr>
+            <tr style="color: #ecc734">
+               <td><input type="number" min="0" max="15000" step="100" value="200" class="big_info"
+                     id="SetCurrent"></td>
+               <td><input type="button" onclick="sendCurrent()" class="button" value="Set Current"></td>
+            </tr>
+         </table>
+      </form>
+   </div>
+
+   <div id="TabLive" class="tc">
+      <div style="width:100%; min-width: 50%; float: left; display: flex;">
+         <canvas id="canvas"></canvas>
+      </div>
+      <div style="float: right; width: auto; min-width: 340px">
+         <fieldset style="margin-left: 16px">
+            <legend>Live Settings</legend>
+            <p class="info" id="VoltageInfo"></p>
+            <p class="info" id="CurrentInfo"></p>
+            <p class="info" id="PowerInfo"></p>
+            <table>
+               <tr>
+                  <td>Voltage</td>
+                  <td align="right">
+                     <div class="toggle">
+                        <input type="checkbox" name="ToggleVoltage" id="ToggleVoltage" class="toggle-checkbox" checked
+                           onclick="(function(c){window.myLine.getDatasetMeta(0).hidden = !c.checked; myLine.update()})(this)">
+                        <label class="toggle-label" for="ToggleVoltage"></label>
+                     </div>
+                  </td>
+               </tr>
+               <tr>
+                  <td>Current</td>
+                  <td align="right">
+                     <div class="toggle">
+                        <input type="checkbox" name="ToggleCurrent" id="ToggleCurrent" class="toggle-checkbox" checked
+                           onclick="(function(c){window.myLine.getDatasetMeta(1).hidden = !c.checked; myLine.update()})(this)">
+                        <label class="toggle-label" for="ToggleCurrent"></label>
+                     </div>
+                  </td>
+               </tr>
+               <tr>
+                  <td>Power</td>
+                  <td align="right">
+                     <div class="toggle">
+                        <input type="checkbox" name="TogglePower" id="TogglePower" class="toggle-checkbox" checked
+                           onclick="(function(c){window.myLine.getDatasetMeta(2).hidden = !c.checked; myLine.update()})(this)">
+                        <label class="toggle-label" for="TogglePower"></label>
+                     </div>
+                  </td>
+               </tr>
+               <tr>
+                  <td>Sample Rate:</td>
+               </tr>
+            </table>
+            <table>
+               <tr>
+                  <td>Slow</td>
+                  <td><input id="samplerate" type="range" class="slider" style="width: 90%" min="1" max="100"
+                        value="5"></td>
+                  <td>Fast</td>
+               </tr>
+            </table>
+         </fieldset>
+         <table style="padding-left: 12px">
+            <tr>
+               <td><input type="button" onclick="setSampleRate()" class="button" value="Set"></td>
+               <td><input id="startstop" type="button" class="button stopbutton" onclick="liveUpdate()" value="Start">
+               </td>
+            </tr>
+         </table>
+      </div>
+   </div>
+
+   <div id="TabUpdate" class="tc">
+      <p>This section is currently unavailabe</p>
+   </div>
+</body>
+
+</html>

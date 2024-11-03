@@ -57,9 +57,13 @@ void LOG_Init(const LogLevel_e level, const uint32_t *const systick)
 {
     s_maxLogLevel = level;
     s_systick = systick;
-    // clear the terminal
-    printf("\033c");
-    printf("Ready\r\n");
+
+    if (level != eLOG_LEVEL_NONE)
+    {
+        // clear the terminal
+        printf("\033c");
+        printf("Ready\r\n");
+    }
 }
 
 /**

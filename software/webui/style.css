@@ -1,0 +1,191 @@
+input{
+   width:6ch;
+   margin-left: 1ch;
+   margin-right: 1ch;
+}
+fieldset{
+   border-radius: 10px;
+}
+legend{
+   font-weight: bold;
+   color: #4934ec;
+}
+h1{
+   color: #4934ec;
+   text-align: center;
+   font-size: 40px;
+}
+body{
+   font-family: sans-serif;
+   color: black;
+   font-size: 20px;
+}
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+   opacity:1;
+}
+canvas{
+   -moz-user-select: none;
+   -webkit-user-select: none;
+   -ms-user-select: none;
+}
+table {
+   font-size: inherit;
+   width: -webkit-fill-available;
+   width: -moz-available;
+}
+.button {
+   color: white;
+   background-color: #4934ec;
+   border: none;
+   min-width: 10ch;
+   width: -webkit-fill-available;
+   width: -moz-available;
+   border-radius: 20px;
+   font-weight: bolder;
+   font-size: 20px;
+   padding: 10px;
+   margin-top: 6px;
+   margin-left: 10px;
+}
+.button:hover{
+   background-color: #6190ff;
+}
+.button:active{
+   background-color: green;
+}
+.button:focus {
+   outline:0;
+}
+.stopbutton {
+   background-color: green;
+}
+.stopbutton:hover{
+   background-color: green;
+}
+.stopbutton:active{
+   background-color: green;
+}
+.input_num {
+   background-color: transparent;
+   outline: none;
+   border: 1px;
+   font-size: 20px;
+}
+.slider {
+   -webkit-appearance: none;
+   width: 35ch;
+   height: 15px;
+   border-radius: 5px;  
+   background: #d3d3d3;
+   outline: none;
+   -webkit-transition: .2s;
+   transition: opacity .2s;
+}
+
+.slider::-webkit-slider-thumb {
+   -webkit-appearance: none;
+   appearance: none;
+   width: 25px;
+   height: 25px;
+   border-radius: 50%; 
+   background: #4934ec;
+   cursor: pointer;
+}
+
+.slider::-moz-range-thumb {
+   width: 25px;
+   height: 25px;
+   border-radius: 50%;
+   background: #4934ec;
+   cursor: pointer;
+}
+.tab {
+   overflow: hidden;
+   border: 1px solid #ccc;
+   border-bottom:none;
+   background-color: #4934ec;
+   border-radius: 24px 24px 0px 0px;
+   padding: 4px 0px 0px 4px;
+}
+
+.tab button {
+   background-color: inherit;
+   float: left;
+   border: none;
+   outline: none;
+   cursor: pointer;
+   padding: 14px 16px;
+   transition: 0.2s;
+   font-size: 17px;
+   font-weight: bold;
+   color: white;
+   border-radius: 20px 20px 0px 0px;
+}
+
+.tab button:hover {
+   color: white;
+   background-color: #6190ff;
+}
+
+.tab button.active {
+   color: #4934ec;
+   background-color: white;
+}
+
+.tc {
+   display: none;
+   padding: 6px 12px;
+   border: 1px solid #ccc;
+   border-top: none;
+   max-width: 100%;
+}
+.info {
+   border-radius: 20px;
+   padding-left: 0px;
+   padding-bottom: 6px;
+   margin-top: 6px;
+   margin-bottom: 0px;
+   margin-left: 0px;
+}
+
+.big_info {
+   font-size: 5em;
+   font-weight: bold;
+   font-family: sans-serif;
+   text-align: center;
+
+}
+
+.toggle {
+   position: relative; width: 60px;
+   -webkit-user-select:none; -moz-user-select:none; -ms-user-select: none;
+}
+.toggle-checkbox {
+   display: none;
+}
+.toggle-label {
+   display: block; overflow: hidden; cursor: pointer;
+   height: 30px; padding: 0; line-height: 30px;
+   border: 2px solid #E3E3E3; border-radius: 30px;
+   background-color: #DBDBDB;
+   transition: background-color 0.2s ease-in;
+}
+.toggle-label:before {
+   content: "";
+   display: block; width: 30px; margin: 0px;
+   background: #FFFFFF;
+   position: absolute; top: 0; bottom: 0;
+   right: 25px;
+   border: 2px solid #E3E3E3; border-radius: 30px;
+   transition: all 0.2s ease-in 0s; 
+}
+.toggle-checkbox:checked + .toggle-label {
+   background-color: #4934ec;
+}
+.toggle-checkbox:checked + .toggle-label, .toggle-checkbox:checked + .toggle-label:before {
+   border-color: #4934ec;
+}
+.toggle-checkbox:checked + .toggle-label:before {
+   right: 0px; 
+}

@@ -29,6 +29,10 @@
 #define CONFIG_CURRENT_LIMIT 1000
 #endif
 
+#ifndef CONFIG_VOLTAGE_LIMIT
+#define CONFIG_VOLTAGE_LIMIT 15000
+#endif
+
 #define array_size(x) (sizeof(x) / sizeof(x[0]))
 //------------------------------------------------------------------------------
 // External variables
@@ -41,16 +45,8 @@
 //------------------------------------------------------------------------------
 // Module type definitions
 //------------------------------------------------------------------------------
-typedef struct __attribute__((packed))
-{
-    uint32_t voltage;
-    uint32_t current;
-    uint32_t power;
-    uint8_t duty;
-    bool ccMode;
-} BoostState_t;
 
-typedef struct __attribute__((packed))
+typedef struct
 {
     uint32_t voltage;
     uint32_t current;
@@ -60,17 +56,15 @@ typedef struct __attribute__((packed))
 // Module static variables
 //------------------------------------------------------------------------------
 static volatile uint32_t s_systickCount = 0;
-static volatile uint8_t scratch[32];
 
-static size_t s_bytesReceived = 0;
-static Command_t s_command = {
+static volatile size_t s_bytesReceived = 0;
+static volatile Command_t s_command = {
     .voltage = 0,
     .current = CONFIG_CURRENT_LIMIT,
 };
-static BoostState_t s_state = {
+static volatile BoostState_t s_state = {
     .voltage = 0,
     .current = CONFIG_CURRENT_LIMIT,
-    .power = 0,
     .duty = 0,
     .ccMode = false,
 };
@@ -97,13 +91,14 @@ int main(void)
 
     SysTick_Init();
 
-    if (WaitForDebuggerToAttach(1000))
+    const bool debuggerAttached = !WaitForDebuggerToAttach(1000);
+    if (debuggerAttached)
     {
-        LOG_Init(eLOG_LEVEL_NONE, (uint32_t *)&s_systickCount);
+        LOG_Init(eLOG_LEVEL_INFO, (uint32_t *)&s_systickCount);
     }
     else
     {
-        LOG_Init(eLOG_LEVEL_INFO, (uint32_t *)&s_systickCount);
+        LOG_Init(eLOG_LEVEL_NONE, (uint32_t *)&s_systickCount);
     }
 
 #ifdef CONFIG_USE_USB
@@ -111,6 +106,9 @@ int main(void)
 #endif
 
     BoostPWM_Init();
+
+    BoostPWM_SetVoltageTarget(s_command.voltage);
+    BoostPWM_SetCurrentLimit(s_command.current);
 
 #if 0
 
@@ -124,21 +122,51 @@ int main(void)
 
     WDT_Init(0x0FFF, IWDG_Prescaler_128);
 
-    static uint32_t voltageTarget = 0;
-    static uint32_t currentLimit = CONFIG_CURRENT_LIMIT;
+    static uint32_t power = 0;
 
     static size_t s_lastBytesReceived = 0;
-
     static uint32_t lastTime = 0;
-
-    BoostPWM_SetVoltageTarget(voltageTarget);
-    BoostPWM_SetCurrentLimit(currentLimit);
 
     while (1)
     {
         WDT_Pet();
 
-#if 0
+        if (s_bytesReceived != s_lastBytesReceived)
+        {
+            LOGD(TAG, "Received %d bytes", s_bytesReceived - s_lastBytesReceived);
+            LOGI(TAG, "Setting Voltage: %dmV, Current: %dmA", s_command.voltage, s_command.current);
+
+            if (s_command.voltage > CONFIG_VOLTAGE_LIMIT)
+            {
+                s_command.voltage = CONFIG_VOLTAGE_LIMIT;
+            }
+
+            if (s_command.current > CONFIG_CURRENT_LIMIT)
+            {
+                s_command.voltage = CONFIG_CURRENT_LIMIT;
+            }
+
+            BoostPWM_SetVoltageTarget(s_command.voltage);
+            BoostPWM_SetCurrentLimit(s_command.current);
+            s_lastBytesReceived = s_bytesReceived;
+        }
+
+        BoostPWM_GetState((BoostState_t *)&s_state);
+        power = (s_state.voltage * s_state.current) / 1000;
+
+        if (s_systickCount - lastTime > 1000)
+        {
+            lastTime = s_systickCount;
+            LOGI(TAG, "CC: %d, Voltage: %5dmV, Current: %4dmA, Power: %5dmW, Duty: %3d",
+                 s_state.ccMode,
+                 s_state.voltage,
+                 s_state.current,
+                 power,
+                 s_state.duty);
+        }
+
+        if (!debuggerAttached) continue;
+
         int c = getchar();
 
         switch (c)
@@ -146,46 +174,35 @@ int main(void)
             case '0':
                 BoostPWM_SetVoltageTarget(0);
                 BoostPWM_SetCurrentLimit(CONFIG_CURRENT_LIMIT);
-                voltageTarget = 0;
-                currentLimit = CONFIG_CURRENT_LIMIT;
+                s_command.voltage = 0;
+                s_command.current = CONFIG_CURRENT_LIMIT;
                 break;
             case '+':
             case '=':
                 if (s_state.ccMode)
                 {
-                    currentLimit += 25;
-                    BoostPWM_SetCurrentLimit(currentLimit);
+                    s_command.current += 25;
+                    BoostPWM_SetCurrentLimit(s_command.current);
                 }
                 else
                 {
-                    voltageTarget += 50;
-                    BoostPWM_SetVoltageTarget(voltageTarget);
+                    s_command.voltage += 50;
+                    BoostPWM_SetVoltageTarget(s_command.voltage);
                 }
                 break;
             case '-':
                 if (s_state.ccMode)
                 {
-                    currentLimit -= 25;
-                    BoostPWM_SetCurrentLimit(currentLimit);
+                    s_command.current -= 25;
+                    BoostPWM_SetCurrentLimit(s_command.current);
                 }
                 else
                 {
-                    voltageTarget -= 50;
-                    BoostPWM_SetVoltageTarget(voltageTarget);
+                    s_command.voltage -= 50;
+                    BoostPWM_SetVoltageTarget(s_command.voltage);
                 }
                 break;
             case -1:
-                s_state.voltage = BoostPWM_GetVoltageMillivolts();
-                s_state.current = BoostPWM_GetCurrentMilliamps();
-                s_state.current = ((int)s_state.current < 0) ? 0 : s_state.current;
-                s_state.duty = BoostPWM_GetDuty();
-                s_state.power = (s_state.voltage * s_state.current) / 1000;
-                LOGI(TAG, "CC: %d, Voltage: %5dmV, Current: %4dmA, Power: %5dmW, Duty: %3d",
-                     s_state.ccMode,
-                     s_state.voltage,
-                     s_state.current,
-                     s_state.power,
-                     s_state.duty);
                 break;
             case 'c':
                 s_state.ccMode = true;
@@ -197,49 +214,17 @@ int main(void)
                 if (c <= '0' || c > '9') break;
                 if (s_state.ccMode)
                 {
-                    currentLimit = (c - '0') * 100;
-                    BoostPWM_SetCurrentLimit(currentLimit);
+                    s_command.current = (c - '0') * 100;
+                    BoostPWM_SetCurrentLimit(s_command.current);
                 }
                 else
                 {
-                    voltageTarget = (c - '0') * 1000;
-                    BoostPWM_SetVoltageTarget(voltageTarget);
+                    s_command.voltage = (c - '0') * 1000;
+                    BoostPWM_SetVoltageTarget(s_command.voltage);
                 }
                 break;
         }
         Delay_Ms(100);
-#endif
-
-        // TODO: make this part of the boost driver to avoid the copy
-        s_state.voltage = BoostPWM_GetVoltageMillivolts();
-        s_state.current = BoostPWM_GetCurrentMilliamps();
-        if (s_state.current < 0)
-        {
-            s_state.current = 0;
-        }
-        s_state.power = (s_state.voltage * s_state.current) / 1000;
-        s_state.duty = BoostPWM_GetDuty();
-
-        if (s_bytesReceived != s_lastBytesReceived)
-        {
-            LOGD(TAG, "Received %d bytes", s_bytesReceived - s_lastBytesReceived);
-            LOGI(TAG, "Setting Voltage: %dmV, Current: %dmA", s_command.voltage, s_command.current);
-
-            BoostPWM_SetVoltageTarget(s_command.voltage);
-            BoostPWM_SetCurrentLimit(s_command.current);
-            s_lastBytesReceived = s_bytesReceived;
-        }
-
-        if (s_systickCount - lastTime > 1000)
-        {
-            lastTime = s_systickCount;
-            LOGI(TAG, "CC: %d, Voltage: %5dmV, Current: %4dmA, Power: %5dmW, Duty: %3d",
-                 s_state.ccMode,
-                 s_state.voltage,
-                 s_state.current,
-                 s_state.power,
-                 s_state.duty);
-        }
     }
 }
 
@@ -330,7 +315,10 @@ void SysTick_Handler(void)
 void usb_handle_user_in_request(struct usb_endpoint *e, uint8_t *scratchpad, int endp, uint32_t sendtok, struct rv003usb_internal *ist)
 {
     // Make sure we only deal with control messages. Like get/set feature reports.
-    usb_send_empty(sendtok);
+    if (endp)
+    {
+        usb_send_empty(sendtok);
+    }
 }
 
 /**
@@ -357,10 +345,10 @@ void usb_handle_other_control_message(struct usb_endpoint *e, struct usb_urb *s,
  */
 void usb_handle_user_data(struct usb_endpoint *e, int current_endpoint, uint8_t *data, int len, struct rv003usb_internal *ist)
 {
+#if 0
     int offset = e->count << 3;
     int torx = e->max_len - offset;
     if (torx > len) torx = len;
-#if 0
 	if( torx > 0 )
 	{
 		memcpy( scratch + offset, data, torx );
@@ -390,7 +378,6 @@ void usb_handle_user_data(struct usb_endpoint *e, int current_endpoint, uint8_t 
 
 void usb_handle_hid_get_report_start(struct usb_endpoint *e, int reqLen, uint32_t lValueLSBIndexMSB)
 {
-    if (reqLen > sizeof(scratch)) reqLen = sizeof(scratch);
 
     // You can check the lValueLSBIndexMSB word to decide what you want to do here
     // But, whatever you point this at will be returned back to the host PC where
@@ -399,8 +386,9 @@ void usb_handle_hid_get_report_start(struct usb_endpoint *e, int reqLen, uint32_
     // Please note, that on some systems, for this to work, your return length must
     // match the length defined in HID_REPORT_COUNT, in your HID report, in usb_config.h
 
+    // if (reqLen > sizeof(s_state)) reqLen = sizeof(s_state);
     e->opaque = (void *)&s_state;
-    e->max_len = reqLen;
+    e->max_len = sizeof(s_state);
 }
 
 void usb_handle_hid_set_report_start(struct usb_endpoint *e, int reqLen, uint32_t lValueLSBIndexMSB)
@@ -413,8 +401,8 @@ void usb_handle_hid_set_report_start(struct usb_endpoint *e, int reqLen, uint32_
     // Note that you may need to make this match HID_REPORT_COUNT, in your HID
     // report, in usb_config.h
 
-    if (reqLen > sizeof(scratch)) reqLen = sizeof(scratch);
-    e->max_len = reqLen;
+    // if (reqLen > sizeof(s_state)) reqLen = sizeof(s_state);
+    e->max_len = sizeof(s_state);
 }
 
 static uint8_t newByte = 0;

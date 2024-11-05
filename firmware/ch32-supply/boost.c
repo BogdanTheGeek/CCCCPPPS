@@ -29,12 +29,13 @@
 #define Rin 100
 #define Rt  (Rf + Rin)
 
-#define INTERNAL_VREF 1200
+#define INTERNAL_VREF  1200
 #define ADC_RESOLUTION 10
-#define ADC_MAX (1 << ADC_RESOLUTION)
+#define ADC_MAX        (1 << ADC_RESOLUTION)
 
-#define MIN_DUTY 0
-#define MAX_DUTY 250
+#define MIN_DUTY    0
+#define MAX_DUTY    250
+#define ADC_SAMPLES (3)
 
 // PID terms
 #define KP(eP) ((eP) >> 0)
@@ -68,16 +69,17 @@ static uint16_t s_feedbackIRaw = 0;
 static int16_t s_currentOffset = 0;
 static uint16_t s_vref = 0;
 static uint8_t s_pwmDuty = 0;
+static uint8_t s_ccMode = 0;
 static volatile uint32_t s_targetVRaw = 0;
 static volatile uint32_t s_targetIRaw = 0;
 
 //------------------------------------------------------------------------------
 // Module static function prototypes
 //------------------------------------------------------------------------------
-static uint32_t GetVRefMillivolts(void);
-static uint32_t GetVoltageMillivolts(void);
+static int GetVRefMillivolts(void);
+static uint16_t GetVoltageMillivolts(void);
 static uint16_t MillivoltsToADC(uint32_t millivolts);
-static uint32_t GetCurrentMilliamps(void);
+static uint16_t GetCurrentMilliamps(void);
 static uint16_t MilliampsToADC(uint32_t milliamps);
 
 static void SetupOpAmp(void);
@@ -187,33 +189,18 @@ void BoostPWM_SetCurrentLimit(uint32_t milliamps)
 }
 
 /**
- * @brief  Get the current voltage of the boost converter
- * @param  None
- * @return The output voltage in millivolts
+ * @brief  Get the state of the boost converter
+ * @param[out] state - The state of the boost converter
+ * @return None
  */
-uint32_t BoostPWM_GetVoltageMillivolts(void)
+void BoostPWM_GetState(BoostState_t *state)
 {
-    return GetVoltageMillivolts();
-}
-
-/**
- * @brief  Get the current current of the boost converter
- * @param  None
- * @return The output current in milliamps
- */
-uint32_t BoostPWM_GetCurrentMilliamps(void)
-{
-    return GetCurrentMilliamps();
-}
-
-/**
- * @brief  Get the current duty cycle of the boost converter
- * @param  None
- * @return The duty cycle (0-255)
- */
-uint8_t BoostPWM_GetDuty(void)
-{
-    return s_pwmDuty;
+    *state = (BoostState_t){
+        .voltage = GetVoltageMillivolts(),
+        .current = GetCurrentMilliamps(),
+        .duty = s_pwmDuty,
+        .ccMode = s_ccMode,
+    };
 }
 
 /**
@@ -244,9 +231,9 @@ void ADC1_IRQHandler(void)
  * @param  None
  * @return The VRef voltage in millivolts
  */
-static uint32_t GetVRefMillivolts(void)
+static int GetVRefMillivolts(void)
 {
-    return (INTERNAL_VREF * ADC_MAX) / s_vref;
+    return ((INTERNAL_VREF * ADC_MAX) / s_vref);
 }
 
 /**
@@ -254,9 +241,9 @@ static uint32_t GetVRefMillivolts(void)
  * @param  None
  * @return The output voltage in millivolts
  */
-static uint32_t GetVoltageMillivolts(void)
+static uint16_t GetVoltageMillivolts(void)
 {
-    const uint32_t vref = GetVRefMillivolts();
+    const int vref = GetVRefMillivolts();
     return (s_feedbackVRaw * vref * Rt) / (Rin * ADC_MAX);
 }
 
@@ -275,9 +262,14 @@ static uint16_t MillivoltsToADC(uint32_t millivolts)
  * @param  None
  * @return The output current in milliamps
  */
-static uint32_t GetCurrentMilliamps(void)
+static uint16_t GetCurrentMilliamps(void)
 {
-    return (s_feedbackIRaw - s_currentOffset);
+    const int current = (int)s_feedbackIRaw - s_currentOffset;
+    if (current < 0)
+    {
+        return 0;
+    }
+    return (uint16_t)current;
 }
 
 /**
@@ -326,11 +318,10 @@ static void SetupADC(void)
 
     // Sampling time for channels. Careful: This has PID tuning implications.
     // Note that with 3 and 3,the full loop (and injection) runs at 138kHz.
-    ADC1->SAMPTR2 = (3 << (3 * 7)) | (3 << (3 * 8));
+    ADC1->SAMPTR2 = (ADC_SAMPLES << (3 * 7)) | (ADC_SAMPLES << (3 * 8)) | (ADC_SAMPLES << (3 * 1));
     // 0:7 => 3/9/15/30/43/57/73/241 cycles
     // (4 == 43 cycles), (6 = 73 cycles)  Note these are alrady /2, so
-    // setting this to 73 cycles actually makes it wait 256 total cycles
-    // @ 48MHz.
+    // setting this to 73 cycles actually makes it wait 256 total cycles @ 48MHz.
 
     // Turn on ADC and set rule group to sw trig
     // 0 = Use TRGO event for Timer 1 to fire ADC rule.
@@ -399,6 +390,7 @@ static void BoostControllerPID(void)
     // Calculate the voltage and current errors
     const int ePv = s_targetVRaw - s_feedbackVRaw;
     const int ePi = s_targetIRaw - s_feedbackIRaw;
+    s_ccMode = (ePv < ePi) ? 0 : 1;
 
     // Picking the smallest error gives current or voltage limiting
     const int eP = min(ePv, ePi);

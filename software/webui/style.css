@@ -15,10 +15,13 @@ h1{
    text-align: center;
    font-size: 40px;
 }
+html,
 body{
    font-family: sans-serif;
    color: black;
    font-size: 20px;
+   margin: 0;
+   height: 100%;
 }
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
@@ -139,7 +142,14 @@ table {
    border: 1px solid #ccc;
    border-top: none;
    max-width: 100%;
+   height: auto;
+   flex-direction: row;
+   flex-wrap: wrap;
 }
+.tc.active {
+   display: flex;
+}
+
 .info {
    border-radius: 20px;
    padding-left: 0px;
@@ -155,6 +165,21 @@ table {
    font-family: sans-serif;
    text-align: center;
 
+}
+
+.indicator {
+   font-size: 2em;
+   font-weight: bold;
+   font-family: sans-serif;
+   text-align: center;
+}
+.indicator.on {
+   color: white;
+   background-color: red;
+}
+.indicator.off {
+   color: black;
+   background-color: white;
 }
 
 .toggle {

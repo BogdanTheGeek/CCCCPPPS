@@ -6,89 +6,62 @@ let dev = null;
 
 var update = false;
 var interval;
-var samplerate = 100;
+var samplerate = 5;
+var samplewindow = 5;
+var samplecount = samplewindow;
 
+var stats = {
+   good: 0,
+   bad: 0,
+   total: 0,
+}
 
-var chartConfig = {
-   type: 'line',
-   data: {
-      labels: [],
-      datasets: [{
-         label: 'Voltage',
-         backgroundColor: "#4934ec",
-         borderColor: "#4934ec",
-         data: [],
-         fill: false
-      }, {
-         label: 'Current',
-         backgroundColor: "#ecc734",
-         borderColor: "#ecc734",
-         data: [],
-         fill: false
-      }, {
-         label: 'Power',
-         backgroundColor: "#ec6b34",
-         borderColor: "#ec6b34",
-         data: [],
-         fill: false
-      }]
-   },
-   options: {
-      responsive: true,
-      aspectRatio: 3,
-      // animationEnabled: false, 
-      title: {
-         display: false
-      },
-      legend: {
-         position: 'bottom',
-         labels: {
-            fontSize: 16,
-            fontColor: '#000'
-         }
-      },
-      tooltips: {
-         mode: 'index',
-         intersect: false
-      },
-      hover: {
-         mode: 'nearest',
-         intersect: true
-      },
-      scales: {
-         xAxes: [{
-            display: false,
-            scaleLabel: {
-               display: true,
-               labelString: 'T'
-            }
-         }],
-         yAxes: [
-            {
-               display: true,
-               scaleLabel: {
-                  display: true,
-                  labelString: 'mV/mA/mW'
-               }
-            }
-         ]
-      }
+// Enable mock data for testing
+const MOCK = false;
+const BOOST_REPORT_SIZE = 8 * 3;
+const STATS = true;
+
+var traces = [{
+   name: 'Voltage',
+   ...generateSamples(samplewindow * samplerate),
+   mode: 'lines',
+   line: { color: '#4934ec', shape: 'spline' }
+}, {
+   name: 'Current',
+   ...generateSamples(samplewindow * samplerate),
+   mode: 'lines',
+   line: { color: '#ecc734', shape: 'spline' }
+}, {
+   name: 'Power',
+   ...generateSamples(samplewindow * samplerate),
+   mode: 'lines',
+   line: { color: '#ec6b34', shape: 'spline' }
+}];
+
+function generateSamples(count) {
+   const x = new Array(count);
+   const y = new Array(count);
+   for (let i = 0; i < count; i++) {
+      x[i] = i / samplerate;
+      y[i] = 0;
    }
-};
-
+   return { x, y };
+}
 
 function onLoad() {
-   var ctx = document.getElementById('canvas').getContext('2d');
-   window.myLine = new Chart(ctx, chartConfig);
-   var c = chartConfig.data.datasets;
-   for (var i = 0; i < 100; ++i) {
-      chartConfig.data.labels.push(" ");
-      c[0].data.push(0);
-      c[1].data.push(0);
-      c[2].data.push(0);
 
+   onResize();
+   updateReadings(new PowerSupplyState({}));
+
+   const layout = {
+      autosize: true,
+      margin: { t: 20, b: 20, l: 40, r: 0 },
+      legend: { x: 0, y: 1, traceorder: 'normal', font: { size: 16 } },
+      yaxis: { automargin: true },
    }
-   updateReadings(0, 0, 0);
+   const config = { responsive: true }
+   Plotly.newPlot('canvas', traces, layout, config);
+
 
    if (!navigator.hid) {
       setStatusError("Browser does not support HID.");
@@ -98,10 +71,25 @@ function onLoad() {
       navigator.hid.addEventListener("disconnect", (event) => { if (event.device.productName == expectedProductName) closeDeviceTool(); });
    }
 
+   const samplerate_value = document.getElementById("samplerate-value");
+   document.getElementById("samplerate").oninput = function() {
+      samplerate_value.innerHTML = this.value + "Hz";
+   }
+
+   const samplewindow_value = document.getElementById("samplewindow-value");
+   document.getElementById("samplewindow").oninput = function() {
+      samplewindow_value.innerHTML = this.value + "s";
+   }
+
    setSampleRate();
 
-}
+   if (STATS) {
+      setInterval(() => {
+         document.getElementById("StatusPerf").innerHTML = `Good: ${stats.good} Bad: ${stats.bad} Total: ${stats.total}`;
+      }, 1000);
+   }
 
+}
 
 // ---------------------- USB ----------------------
 
@@ -151,7 +139,7 @@ function tryOpen(thisDev) {
       if (result === undefined) {
          if (dev) dev.close();
          dev = thisDev;
-         setStatus("Connected.");
+         setStatus("Connected");
       }
       else {
          setStatusError("Error: Could not open; " + result);
@@ -179,18 +167,45 @@ function writeU32LE(data, offset, value) {
    data[offset + 3] = (value >> 24) & 0xFF;
 }
 
+function readU16LE(data, offset) {
+   return data[offset] + (data[offset + 1] << 8);
+}
+
+function writeU16LE(data, offset, value) {
+   data[offset] = value & 0xFF;
+   data[offset + 1] = (value >> 8) & 0xFF;
+}
+
 class PowerSupplyState {
    constructor(data) {
-      this.voltage = readU32LE(data, 0);
-      this.current = readU32LE(data, 4);
-      this.power = readU32LE(data, 8);
-      this.duty = data[12];
-      this.ccMode = data[13] == 1;
+      if (data instanceof Uint8Array) {
+         if (data.length < 6) {
+            console.log(`Invalid data length: ${data.length}`);
+         }
+         this.voltage = readU16LE(data, 0);
+         this.current = readU16LE(data, 2);
+         if (this.voltage == 0 || this.current == 0) {
+            this.power = 0;
+         }
+         else {
+            this.power = this.voltage * this.current / 1000;
+         }
+         this.duty = data[4];
+         this.ccMode = data[5] == 1;
+      }
+      else {
+         this.voltage = data.voltage || 0;
+         this.current = data.current || 0;
+         this.power = data.power || 0;
+         this.duty = data.duty || 0;
+         this.ccMode = data.ccMode || false;
+         return;
+      }
    }
 }
 async function readStatus(dev) {
    const report = await dev.receiveFeatureReport(0xAA);
-   if (!report) {
+   if (!report || !report.buffer || !report.buffer.byteLength) {
       throw "Error reading status";
    }
 
@@ -200,6 +215,9 @@ async function readStatus(dev) {
 }
 
 async function sendCommand(dev, command) {
+   if (command.length > BOOST_REPORT_SIZE) {
+      throw "Command too long";
+   }
    const report = await dev.sendFeatureReport(0xAA, command);
    if (!report) {
       throw "Error sending command";
@@ -224,10 +242,13 @@ async function setCurrent(current) {
 async function requestStatus() {
    if (dev) {
       await readStatus(dev).then((status) => {
-         updateReadings(status.voltage, status.current, status.power);
+         updateReadings(status)
+         stats.good++;
       }).catch((e) => {
+         stats.bad++;
          handleError(e);
       });
+      stats.total++;
    }
    else {
       tryConnect();
@@ -237,46 +258,70 @@ async function requestStatus() {
 
 // ---------------------- UI ----------------------
 
-function setStatus(msg) {
-   document.getElementById("STATUS").innerHTML = msg;
+function onResize() {
+   const tab = document.getElementById("TabLive");
+   tab.style.height = window.innerHeight - tab.offsetTop - 10 + "px";
+}
+
+function setStatus(msg, color = "green") {
+   document.getElementById("status").innerHTML = `<font color=${color}>${msg}</font>`;
 }
 
 function setStatusError(msg) {
-   setStatus("<FONT COLOR=RED>" + msg + "</FONT>");
+   setStatus(msg, "red");
    console.trace();
 }
 
+function updateLayout() {
 
-function addData(voltage, current, power) {
-   if (update == false) return;
-   if (chartConfig.data.datasets.length > 0) {
-
-      var c = chartConfig.data.datasets;
-
-      c[0].data.push(voltage);
-      c[1].data.push(current);
-      c[2].data.push(power);
-
-      c[0].data.shift();
-      c[1].data.shift();
-      c[2].data.shift();
-
-      window.myLine.update();
-   }
+   Plotly.relayout('canvas', {
+      xaxis: {
+         range: [Math.max(samplecount - samplewindow, 0), samplecount]
+      },
+   });
 }
 
-function switchTab(evt, t) {
-   var i, tc, tl;
-   tc = document.getElementsByClassName("tc");
-   for (i = 0; i < tc.length; i++) {
-      tc[i].style.display = "none";
+
+function addData(status) {
+   if (update == false) return;
+   samplecount += 1 / samplerate;
+
+   Plotly.extendTraces('canvas', {
+      x: [[samplecount]],
+      y: [[status.voltage]],
+   }, [0]);
+
+   Plotly.extendTraces('canvas', {
+      x: [[samplecount]],
+      y: [[status.current]],
+   }, [1]);
+
+   Plotly.extendTraces('canvas', {
+      x: [[samplecount]],
+      y: [[status.power]],
+   }, [2]);
+
+   updateLayout();
+}
+
+function switchTab(event, newTabName) {
+
+   const tabLabels = document.getElementsByClassName("tl");
+   for (e of tabLabels) {
+      e.className = e.className.replace(" active", "");
    }
-   tl = document.getElementsByClassName("tl");
-   for (i = 0; i < tl.length; i++) {
-      tl[i].className = tl[i].className.replace(" active", "");
+
+   const tabContents = document.getElementsByClassName("tc");
+   for (e of tabContents) {
+      e.className = e.className.replace(" active", "");
    }
-   document.getElementById(t).style.display = "flex";
-   evt.currentTarget.className += " active";
+
+   document.getElementById(newTabName).className += " active";
+   event.currentTarget.className += " active";
+
+   onResize();
+   updateLayout();
+
 }
 
 function liveUpdate() {
@@ -293,20 +338,43 @@ function liveUpdate() {
 
 function setSampleRate() {
    clearInterval(interval);
-   samplerate = 1000 / document.getElementById("samplerate").value;
-   interval = setInterval(requestStatus, samplerate);
+   samplerate = document.getElementById("samplerate").value;
+   if (MOCK) {
+      interval = setInterval(function() {
+         const voltage = Math.random() * 1000;
+         const current = Math.random() * 100;
+         const power = voltage * current / 1000;
+         addData({ voltage, current, power });
+      }, 1000 / samplerate);
+   }
+   else {
+      interval = setInterval(requestStatus, 1000 / samplerate);
+   }
+
+   samplewindow = document.getElementById("samplewindow").value;
+   console.log(`Setting sample rate to ${samplerate}Hz and sample window to ${samplewindow}s`);
 }
 
-function updateReadings(voltage, current, power) {
-   document.getElementById("VoltageInfo").innerHTML = "Voltage: " + voltage + "mV";
-   document.getElementById("CurrentInfo").innerHTML = "Current: " + current + 'mA';
-   document.getElementById("PowerInfo").innerHTML = "Power: " + power + "mW";
+function setLineShape(smooth) {
+   const shape = smooth ? 'spline' : 'linear';
+   for (let trace of traces) {
+      trace.line.shape = shape;
+   }
+   updateLayout();
+}
 
-   document.getElementById("VoltageBig").innerHTML = voltage;
-   document.getElementById("CurrentBig").innerHTML = current;
-   document.getElementById("PowerBig").innerHTML = power;
 
-   addData(voltage, current, power);
+function updateReadings(status) {
+   document.getElementById("VoltageInfo").innerHTML = "Voltage: " + status.voltage + "mV";
+   document.getElementById("CurrentInfo").innerHTML = "Current: " + status.current + 'mA';
+   document.getElementById("PowerInfo").innerHTML = "Power: " + status.power + "mW";
+
+   document.getElementById("VoltageBig").innerHTML = status.voltage;
+   document.getElementById("CurrentBig").innerHTML = status.current;
+   document.getElementById("PowerBig").innerHTML = status.power;
+   document.getElementById("CC").className = status.ccMode ? "indicator on" : "indicator off";
+
+   addData(status);
 }
 
 function sendVoltage() {

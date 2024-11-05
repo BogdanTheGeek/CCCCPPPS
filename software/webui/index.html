@@ -5,16 +5,16 @@
    <link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon">
    <link rel="stylesheet" type="text/css" href="style.css">
    <meta charset="UTF-8">
-   <script src="Chart.bundle.min.js"></script>
-   <!-- <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> -->
    <script src="script.js"></script>
+   <script src="plotly.min.js" charset="utf-8"></script>
 
-<body onload="onLoad()">
+<body onload="onLoad()" onresize="onResize()">
    <table>
       <tr>
-         <td><input type="submit" class="button" style="width:auto" onClick="reqConnect()" value="Open Device" id=connectButton></td>
+         <td><input type="submit" class="button" style="width:auto" onClick="reqConnect()" value="Open Device"
+               id='connectButton'></td>
          <td>
-            <div id=STATUS></div>
+            <div id='status'></div>
          </td>
       </tr>
    </table>
@@ -27,7 +27,7 @@
       <button class="tl" onclick="switchTab(event,'TabUpdate')">Update</button>
    </div>
 
-   <div id="TabMain" class="tc" style="display: grid">
+   <div id="TabMain" class="tc active">
       <form>
          <table>
             <tr style="color: #4934ec">
@@ -42,15 +42,18 @@
                <td class="big_info" id="PowerBig"></td>
                <td>mW</td>
             </tr>
+            <tr>
+               <td id="CC" class="indicator off">CC</td>
+            </tr>
 
             <tr style="color: #4934ec">
-               <td><input type="number" min="0" max="15000" step="100" value="1000" class="big_info"
-                     id="SetVoltage"></td>
+               <td><input type="number" min="0" max="15000" step="100" value="1000" class="big_info" id="SetVoltage">
+               </td>
                <td><input type="button" onclick="sendVoltage()" class="button" value="Set Voltage"></td>
             </tr>
             <tr style="color: #ecc734">
-               <td><input type="number" min="0" max="15000" step="100" value="200" class="big_info"
-                     id="SetCurrent"></td>
+               <td><input type="number" min="0" max="15000" step="100" value="200" class="big_info" id="SetCurrent">
+               </td>
                <td><input type="button" onclick="sendCurrent()" class="button" value="Set Current"></td>
             </tr>
          </table>
@@ -58,56 +61,40 @@
    </div>
 
    <div id="TabLive" class="tc">
-      <div style="width:100%; min-width: 50%; float: left; display: flex;">
-         <canvas id="canvas"></canvas>
+      <div id="canvas" style="min-width: 70%; flex:1;">
       </div>
-      <div style="float: right; width: auto; min-width: 340px">
+      <div>
          <fieldset style="margin-left: 16px">
             <legend>Live Settings</legend>
             <p class="info" id="VoltageInfo"></p>
             <p class="info" id="CurrentInfo"></p>
             <p class="info" id="PowerInfo"></p>
-            <table>
+            <table style="text-align: center;">
                <tr>
-                  <td>Voltage</td>
-                  <td align="right">
+                  <td>Sample Rate</td>
+               </tr>
+               <tr>
+                  <td><input id="samplerate" type="range" class="slider" min="1" max="100" value="5">
+                  </td>
+                  <td id="samplerate-value">5Hz</td>
+               </tr>
+               <tr>
+                  <td>Sample Window</td>
+               </tr>
+               <tr>
+                  <td><input id="samplewindow" type="range" class="slider" min="1" max="100" value="5">
+                  </td>
+                  <td id="samplewindow-value">5s</td>
+               </tr>
+               <tr>
+                  <td>Smoothing</td>
+                  <td>
                      <div class="toggle">
-                        <input type="checkbox" name="ToggleVoltage" id="ToggleVoltage" class="toggle-checkbox" checked
-                           onclick="(function(c){window.myLine.getDatasetMeta(0).hidden = !c.checked; myLine.update()})(this)">
-                        <label class="toggle-label" for="ToggleVoltage"></label>
+                        <input type="checkbox" id="smoothing" class="toggle-checkbox" checked
+                           onclick="setLineShape(this.checked)">
+                        <label class="toggle-label" for="smoothing"></label>
                      </div>
                   </td>
-               </tr>
-               <tr>
-                  <td>Current</td>
-                  <td align="right">
-                     <div class="toggle">
-                        <input type="checkbox" name="ToggleCurrent" id="ToggleCurrent" class="toggle-checkbox" checked
-                           onclick="(function(c){window.myLine.getDatasetMeta(1).hidden = !c.checked; myLine.update()})(this)">
-                        <label class="toggle-label" for="ToggleCurrent"></label>
-                     </div>
-                  </td>
-               </tr>
-               <tr>
-                  <td>Power</td>
-                  <td align="right">
-                     <div class="toggle">
-                        <input type="checkbox" name="TogglePower" id="TogglePower" class="toggle-checkbox" checked
-                           onclick="(function(c){window.myLine.getDatasetMeta(2).hidden = !c.checked; myLine.update()})(this)">
-                        <label class="toggle-label" for="TogglePower"></label>
-                     </div>
-                  </td>
-               </tr>
-               <tr>
-                  <td>Sample Rate:</td>
-               </tr>
-            </table>
-            <table>
-               <tr>
-                  <td>Slow</td>
-                  <td><input id="samplerate" type="range" class="slider" style="width: 90%" min="1" max="100"
-                        value="5"></td>
-                  <td>Fast</td>
                </tr>
             </table>
          </fieldset>

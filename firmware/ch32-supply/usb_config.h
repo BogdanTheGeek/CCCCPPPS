@@ -20,6 +20,7 @@
 #ifndef __ASSEMBLER__
 
 #include <tinyusb_hid.h>
+#include "funconfig.h"
 
 #ifdef INSTANCE_DESCRIPTORS
 
@@ -46,7 +47,7 @@ static const uint8_t special_hid_desc[] = {
     HID_USAGE(0x00),
     HID_REPORT_SIZE(8),
     HID_COLLECTION(HID_COLLECTION_LOGICAL),
-    HID_REPORT_COUNT(31),
+    HID_REPORT_COUNT(BOOST_REPORT_SIZE - 1),
     HID_REPORT_ID(0xaa)
         HID_USAGE(0x01),
     HID_FEATURE(HID_DATA | HID_VARIABLE | HID_ABSOLUTE),
@@ -95,7 +96,7 @@ static const uint8_t config_descriptor[] = {
     0x81,       // Endpoint Address
     0x03,       // Attributes
     0x01, 0x00, // Size (We aren't using it)
-    100,        // Interval (We don't use it.)
+    1,        // Interval (We don't use it.)
 };
 
 #define STR_MANUFACTURER u"BogdanTheGeek"

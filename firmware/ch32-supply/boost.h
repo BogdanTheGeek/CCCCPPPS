@@ -16,6 +16,8 @@ extern "C" {
 //------------------------------------------------------------------------------
 // Module includes
 //------------------------------------------------------------------------------
+#include "funconfig.h"
+#include <assert.h>
 #include <stdint.h>
 
 //------------------------------------------------------------------------------
@@ -25,6 +27,15 @@ extern "C" {
 //------------------------------------------------------------------------------
 // Module exported type definitions
 //------------------------------------------------------------------------------
+typedef struct __attribute__((packed))
+{
+    uint16_t voltage;
+    uint16_t current;
+    uint8_t duty;
+    uint8_t ccMode;
+} BoostState_t;
+
+static_assert(sizeof(BoostState_t) <= BOOST_REPORT_SIZE, "BoostState_t too big, adjust BOOST_REPORT_SIZE in usb_config.h");
 
 //------------------------------------------------------------------------------
 // Module exported functions
@@ -32,9 +43,7 @@ extern "C" {
 void BoostPWM_Init(void);
 void BoostPWM_SetVoltageTarget(uint32_t millivolts);
 void BoostPWM_SetCurrentLimit(uint32_t milliamps);
-uint32_t BoostPWM_GetVoltageMillivolts(void);
-uint32_t BoostPWM_GetCurrentMilliamps(void);
-uint8_t BoostPWM_GetDuty(void);
+void BoostPWM_GetState(BoostState_t *state);
 
 //------------------------------------------------------------------------------
 // Module exported variables

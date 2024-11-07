@@ -49,6 +49,10 @@
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 #endif
 
+#ifndef INLINE
+#define INLINE __attribute__((always_inline))
+#endif
+
 //------------------------------------------------------------------------------
 // External variables
 //------------------------------------------------------------------------------
@@ -208,18 +212,18 @@ void BoostPWM_GetState(BoostState_t *state)
  * @param  None
  * @return None
  */
-void ADC1_IRQHandler(void) __attribute__((interrupt));
+void ADC1_IRQHandler(void) __attribute__((section(".srodata"))) __attribute__((interrupt));
 void ADC1_IRQHandler(void)
 {
-    // Acknowledge pending interrupts.
-    ADC1->STATR = 0;
-
     // Values come in reverse order.
     s_vref = ADC1->IDATAR2;
     s_feedbackIRaw = ADC1->IDATAR1;
 
     s_feedbackVRaw = ADC1->RDATAR;
     BoostControllerPID();
+
+    // Acknowledge pending interrupts.
+    ADC1->STATR = 0;
 }
 
 //------------------------------------------------------------------------------
@@ -372,7 +376,7 @@ static void SetupOpAmp(void)
  * @return None
  * @note   eP = P error, eI = I error, eD = D error
  */
-static void BoostControllerPID(void)
+static INLINE void BoostControllerPID(void)
 {
     static int lastEP = 0;
     static int eI = 0;
@@ -411,7 +415,7 @@ static void BoostControllerPID(void)
  * @param  None
  * @return None
  */
-static void SetDuty(uint8_t duty)
+static INLINE void SetDuty(uint8_t duty)
 {
     TIM1->CH3CVR = s_pwmDuty = duty;
 }

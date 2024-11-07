@@ -15,9 +15,9 @@ const expectedProductName = "CCCCPPPS";
 const filter = { vendorId: 0x1209, productId: 0xd003 };
 
 // Enable mock data for testing
-const MOCK = false;
+var MOCK = false;
 const BOOST_REPORT_SIZE = 8 * 3;
-const STATS = true;
+var STATS = true;
 
 //------------------------------------------------------------------------------
 // Module type definitions
@@ -66,6 +66,7 @@ var stats = {
     good: 0,
     bad: 0,
     total: 0,
+    disconnected: 0
 }
 
 var traces = [{
@@ -146,7 +147,7 @@ function onLoad() {
 
     if (STATS) {
         setInterval(() => {
-            document.getElementById("StatusPerf").innerHTML = `Good: ${stats.good} Bad: ${stats.bad} Total: ${stats.total}`;
+            document.getElementById("StatusPerf").innerHTML = `Good: ${stats.good} Bad: ${stats.bad} Total: ${stats.total} Disconnected: ${stats.disconnected}`
         }, 1000);
     }
 
@@ -164,10 +165,12 @@ function tryConnect() {
 
     if (!dev) {
         navigator.hid.getDevices().then((devices) => {
-            if (devices.length == 0)
+            if (devices.length == 0) {
                 setStatusError("No devices found. Open a device.");
-            else
+            }
+            else {
                 devices.forEach(tryOpen);
+            }
         });
     }
 }
@@ -178,6 +181,8 @@ function tryConnect() {
  * @return None
  */
 async function closeDeviceTool() {
+    dev = null;
+    stats.disconnected++;
     setStatusError("Disconnected");
 }
 
@@ -187,9 +192,9 @@ async function closeDeviceTool() {
  * @return None
  */
 function reqConnect() {
-    const initialization = navigator.hid.requestDevice({ filters: [filter] });
-    initialization.then(gotUSBDevice);
-    initialization.catch(setStatusError);
+    navigator.hid.requestDevice({ filters: [filter] })
+        .then(gotUSBDevice)
+        .catch(setStatusError);
 }
 
 /**
@@ -219,28 +224,20 @@ function gotUSBDevice(result) {
  * @return None
  */
 function tryOpen(thisDev) {
-    thisDev.open().then((result) => {
-        if (result === undefined) {
-            if (dev) dev.close();
-            dev = thisDev;
-            setStatus("Connected");
-        }
-        else {
-            setStatusError("Error: Could not open; " + result);
-        }
-    }).catch((e) => setStatusError("Error: Could not open; " + e));
+    thisDev.open()
+        .then((result) => {
+            if (result === undefined) {
+                if (dev) dev.close();
+                dev = thisDev;
+                setStatus("Connected");
+            }
+            else {
+                setStatusError("Error: Could not open; " + result);
+            }
+        })
+        .catch((e) => setStatusError("Error: Could not open; " + e));
 }
 
-/**
- * @brief  Handle error
- * @param {object} e: Error object
- * @return None
- */
-async function handleError(e) {
-    if (dev) await dev.close();
-    dev = null;
-    setStatusError(e);
-}
 
 /**
  * @brief  Read a 32-bit unsigned integer in little-endian format
@@ -353,13 +350,14 @@ async function setCurrent(current) {
  */
 async function requestStatus() {
     if (dev) {
-        await readStatus(dev).then((status) => {
-            updateReadings(status)
-            stats.good++;
-        }).catch((e) => {
-            stats.bad++;
-            handleError(e);
-        });
+        await readStatus(dev)
+            .then((status) => {
+                updateReadings(status)
+                stats.good++;
+            })
+            .catch(() => {
+                stats.bad++;
+            });
         stats.total++;
     }
     else {
@@ -420,20 +418,12 @@ function addData(status) {
     if (update == false) return;
     samplecount += 1 / samplerate;
 
-    Plotly.extendTraces('canvas', {
-        x: [[samplecount]],
-        y: [[status.voltage]],
-    }, [0]);
-
-    Plotly.extendTraces('canvas', {
-        x: [[samplecount]],
-        y: [[status.current]],
-    }, [1]);
-
-    Plotly.extendTraces('canvas', {
-        x: [[samplecount]],
-        y: [[status.power]],
-    }, [2]);
+    traces[0].x.push(samplecount);
+    traces[0].y.push(status.voltage);
+    traces[1].x.push(samplecount);
+    traces[1].y.push(status.current);
+    traces[2].x.push(samplecount);
+    traces[2].y.push(status.power);
 
     updateLayout();
 }

@@ -1,10 +1,8 @@
 # Cheap Crappy Constant Current Portable Programmable Power Supply 
-## A Power Supply built with a CH32V003
 
-A DIY Programmable Buck/Boost Power Supply, with the following specs:  
-* Max Output Voltage  15V
-* Max Output Current  1.5A
-* Max Output Power    5W
+`CCCCPPPS` is a DIY Programmable Buck/Boost Power Supply capable of  
+* Max Output Voltage  16V
+* TBD
 
 # Usage
 ## Debug Interface:
@@ -34,6 +32,6 @@ make
 ```
 
 ----
-(c) 2024
-Bogdan Ionescu
-ADBeta
+(c) 2024  
+Bogdan Ionescu  
+ADBeta  

@@ -1,0 +1,119 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+   <link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon">
+   <link rel="stylesheet" type="text/css" href="style.css">
+   <meta charset="UTF-8">
+   <script src="script.js"></script>
+   <script src="plotly.min.js" charset="utf-8"></script>
+
+<body onload="onLoad()" onresize="onResize()">
+   <table>
+      <tr>
+         <td><input type="submit" class="button" style="width:auto" onClick="reqConnect()" value="Open Device"
+               id='connectButton'></td>
+         <td>
+            <div id='status'></div>
+         </td>
+      </tr>
+   </table>
+   <div id="StatusPerf"></div>
+   <div id="Status"></div>
+
+   <div class="tab">
+      <button class="tl active" onclick="switchTab(event,'TabMain')">Main</button>
+      <button class="tl" onclick="switchTab(event,'TabLive')">Live</button>
+      <button class="tl" onclick="switchTab(event,'TabUpdate')">Update</button>
+   </div>
+
+   <div id="TabMain" class="tc active">
+      <form>
+         <table>
+            <tr style="color: #4934ec">
+               <td class="big_info" id="VoltageBig"></td>
+               <td>mV</td>
+            </tr>
+            <tr style="color: #ecc734">
+               <td class="big_info" id="CurrentBig"></td>
+               <td>mA</td>
+            </tr>
+            <tr style="color: #ec6b34">
+               <td class="big_info" id="PowerBig"></td>
+               <td>mW</td>
+            </tr>
+            <tr>
+               <td id="CC" class="indicator off">CC</td>
+            </tr>
+
+            <tr style="color: #4934ec">
+               <td><input type="number" min="0" max="15000" step="100" value="1000" class="big_info" id="SetVoltage">
+               </td>
+               <td><input type="button" onclick="sendVoltage()" class="button" value="Set Voltage"></td>
+            </tr>
+            <tr style="color: #ecc734">
+               <td><input type="number" min="0" max="15000" step="100" value="200" class="big_info" id="SetCurrent">
+               </td>
+               <td><input type="button" onclick="sendCurrent()" class="button" value="Set Current"></td>
+            </tr>
+         </table>
+      </form>
+   </div>
+
+   <div id="TabLive" class="tc">
+      <div id="canvas" style="min-width: 70%; flex:1;">
+      </div>
+      <div>
+         <fieldset style="margin-left: 16px">
+            <legend>Live Settings</legend>
+            <p class="info" id="VoltageInfo"></p>
+            <p class="info" id="CurrentInfo"></p>
+            <p class="info" id="PowerInfo"></p>
+            <table style="text-align: center;">
+               <tr>
+                  <td>Sample Rate</td>
+               </tr>
+               <tr>
+                  <td><input id="samplerate" type="range" class="slider" min="1" max="100" value="5">
+                  </td>
+                  <td id="samplerate-value">5Hz</td>
+               </tr>
+               <tr>
+                  <td>Sample Window</td>
+               </tr>
+               <tr>
+                  <td><input id="samplewindow" type="range" class="slider" min="1" max="100" value="5">
+                  </td>
+                  <td id="samplewindow-value">5s</td>
+               </tr>
+               <tr>
+                  <td>Smoothing</td>
+                  <td>
+                     <div class="toggle">
+                        <input type="checkbox" id="smoothing" class="toggle-checkbox" checked
+                           onclick="setLineShape(this.checked)">
+                        <label class="toggle-label" for="smoothing"></label>
+                     </div>
+                  </td>
+               </tr>
+            </table>
+         </fieldset>
+         <table style="padding-left: 12px">
+            <tr>
+               <td><input type="button" onclick="setSampleRate()" class="button" value="Set"></td>
+               <td><input id="startstop" type="button" class="button stopbutton" onclick="liveUpdate()" value="Start">
+               </td>
+            </tr>
+         </table>
+      </div>
+   </div>
+
+   <div id="TabUpdate" class="tc">
+      <div>
+         <p>Use Subjective Reality Labs's amazing tool</p>
+         <a href="https://subjectiverealitylabs.com/WeblinkUSB/" target="_blank">WebLinkUSB</a>
+      </div>
+   </div>
+</body>
+
+</html>

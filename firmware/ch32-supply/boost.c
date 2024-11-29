@@ -344,6 +344,13 @@ static void SetupADC(void)
     // enable the ADC Conversion Complete IRQ
     NVIC_EnableIRQ(ADC_IRQn);
 
+#if CONFIG_ENABLE_NESTED_INTERRUPTS
+    __set_INTSYSCR(__get_INTSYSCR() | 2); // Enable interrupt nesting.
+
+    // Ref. 6.3 Vector Table of Interrupts and Exceptions
+    PFIC->IPRIOR[15] = 1 << 7; // Turn on preemption for ADC
+#endif
+
     // ADC_JEOCIE: Enable the End-of-conversion interrupt.
     // ADC_JDISCEN | ADC_JAUTO: Force injection after rule conversion.
     // ADC_SCAN: Allow scanning.

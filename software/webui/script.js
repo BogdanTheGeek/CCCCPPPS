@@ -16,7 +16,7 @@ const filter = { vendorId: 0x1209, productId: 0xd003 };
 
 // Enable mock data for testing
 var MOCK = false;
-const BOOST_REPORT_SIZE = 8 * 3;
+const BOOST_REPORT_SIZE = 8 * 1;
 var STATS = true;
 
 //------------------------------------------------------------------------------
@@ -324,9 +324,10 @@ async function sendCommand(dev, command) {
  */
 async function setVoltage(voltage) {
     if (dev) {
-        const command = new Uint8Array(4);
-        writeU32LE(command, 0, voltage);
-        await dev.sendFeatureReport(1, command);
+        const command = new Uint8Array(BOOST_REPORT_SIZE - 1);
+        command[0] = 1;
+        writeU32LE(command, 1, voltage);
+        await dev.sendFeatureReport(0xAA, command);
     }
 }
 
@@ -337,9 +338,10 @@ async function setVoltage(voltage) {
  */
 async function setCurrent(current) {
     if (dev) {
-        const command = new Uint8Array(4);
-        writeU32LE(command, 0, current);
-        await dev.sendFeatureReport(2, command);
+        const command = new Uint8Array(BOOST_REPORT_SIZE - 1);
+        command[0] = 2;
+        writeU32LE(command, 1, current);
+        await dev.sendFeatureReport(0xAA, command);
     }
 }
 

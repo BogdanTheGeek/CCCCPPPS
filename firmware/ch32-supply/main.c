@@ -357,16 +357,16 @@ void usb_handle_user_data(struct usb_endpoint *e, int current_endpoint, uint8_t 
       s_bytesReceived += torx;
 	}
 #else
-    if (len == 5)
+    if (len >= 6 && 0xAA == data[0])
     {
-        const uint8_t cmd = data[0];
+        const uint8_t cmd = data[1];
         switch (cmd)
         {
             case 1:
-                s_command.voltage = *(uint32_t *)(data + 1);
+                s_command.voltage = *(uint32_t *)(data + 2);
                 break;
             case 2:
-                s_command.current = *(uint32_t *)(data + 1);
+                s_command.current = *(uint32_t *)(data + 2);
                 break;
         }
 

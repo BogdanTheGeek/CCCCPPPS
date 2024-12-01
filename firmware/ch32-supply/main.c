@@ -17,6 +17,7 @@
 #include "boost.h"
 #include "ch32v003fun.h"
 #include "log.h"
+#include "nvs.h"
 #include "rv003usb.h"
 
 //------------------------------------------------------------------------------
@@ -32,6 +33,8 @@
 #ifndef CONFIG_VOLTAGE_LIMIT
 #define CONFIG_VOLTAGE_LIMIT 15000
 #endif
+
+#define NVS_MAGIC 0xbee5
 
 #define array_size(x) (sizeof(x) / sizeof(x[0]))
 //------------------------------------------------------------------------------
@@ -50,7 +53,16 @@ typedef struct
 {
     uint32_t voltage;
     uint32_t current;
-} Command_t;
+    uint16_t magic;
+    bool save;
+} Settings_t;
+
+typedef enum
+{
+    CMD_SET_VOLTAGE = 1,
+    CMD_SET_CURRENT = 2,
+    CMD_SAVE = 3,
+} CommandId_e;
 
 //------------------------------------------------------------------------------
 // Module static variables
@@ -58,7 +70,7 @@ typedef struct
 static volatile uint32_t s_systickCount = 0;
 
 static volatile size_t s_bytesReceived = 0;
-static volatile Command_t s_command = {
+static volatile Settings_t s_settings = {
     .voltage = 0,
     .current = CONFIG_CURRENT_LIMIT,
 };
@@ -105,10 +117,25 @@ int main(void)
     usb_setup();
 #endif
 
+    NVS_Init();
+
+    NVS_Load((uint8_t *)&s_settings, 0, sizeof(s_settings));
+
+    if (s_settings.magic != NVS_MAGIC)
+    {
+        LOGE(TAG, "Invalid settings(0x%x), resetting to defaults", s_settings.magic);
+        s_settings.voltage = 0;
+        s_settings.current = CONFIG_CURRENT_LIMIT;
+        s_settings.magic = NVS_MAGIC;
+        s_settings.save = false;
+    }
+
+    LOGI(TAG, "Voltage: %dmV, Current: %dmA", s_settings.voltage, s_settings.current);
+
     BoostPWM_Init();
 
-    BoostPWM_SetVoltageTarget(s_command.voltage);
-    BoostPWM_SetCurrentLimit(s_command.current);
+    BoostPWM_SetVoltageTarget(s_settings.voltage);
+    BoostPWM_SetCurrentLimit(s_settings.current);
 
 #if 0
 
@@ -134,21 +161,34 @@ int main(void)
         if (s_bytesReceived != s_lastBytesReceived)
         {
             LOGD(TAG, "Received %d bytes", s_bytesReceived - s_lastBytesReceived);
-            LOGI(TAG, "Setting Voltage: %dmV, Current: %dmA", s_command.voltage, s_command.current);
+            LOGI(TAG, "Setting Voltage: %dmV, Current: %dmA", s_settings.voltage, s_settings.current);
 
-            if (s_command.voltage > CONFIG_VOLTAGE_LIMIT)
+            if (s_settings.voltage > CONFIG_VOLTAGE_LIMIT)
             {
-                s_command.voltage = CONFIG_VOLTAGE_LIMIT;
+                s_settings.voltage = CONFIG_VOLTAGE_LIMIT;
             }
 
-            if (s_command.current > CONFIG_CURRENT_LIMIT)
+            if (s_settings.current > CONFIG_CURRENT_LIMIT)
             {
-                s_command.voltage = CONFIG_CURRENT_LIMIT;
+                s_settings.voltage = CONFIG_CURRENT_LIMIT;
             }
 
-            BoostPWM_SetVoltageTarget(s_command.voltage);
-            BoostPWM_SetCurrentLimit(s_command.current);
+            BoostPWM_SetVoltageTarget(s_settings.voltage);
+            BoostPWM_SetCurrentLimit(s_settings.current);
             s_lastBytesReceived = s_bytesReceived;
+        }
+
+        if (s_settings.save)
+        {
+            s_settings.save = false;
+            LOGI(TAG, "Saving settings: Voltage: %dmV, Current: %dmA",
+                 s_settings.voltage, s_settings.current);
+            NVS_Save((uint8_t *)&s_settings, sizeof(s_settings));
+            LOGI(TAG, "Settings saved");
+
+            // NOTE: no idea why, but systick skips an interrupt after this
+            SysTick_Init();
+            LOGI(TAG, "SysTick restarted");
         }
 
         BoostPWM_GetState((BoostState_t *)&s_state);
@@ -174,32 +214,32 @@ int main(void)
             case '0':
                 BoostPWM_SetVoltageTarget(0);
                 BoostPWM_SetCurrentLimit(CONFIG_CURRENT_LIMIT);
-                s_command.voltage = 0;
-                s_command.current = CONFIG_CURRENT_LIMIT;
+                s_settings.voltage = 0;
+                s_settings.current = CONFIG_CURRENT_LIMIT;
                 break;
             case '+':
             case '=':
                 if (s_state.ccMode)
                 {
-                    s_command.current += 25;
-                    BoostPWM_SetCurrentLimit(s_command.current);
+                    s_settings.current += 25;
+                    BoostPWM_SetCurrentLimit(s_settings.current);
                 }
                 else
                 {
-                    s_command.voltage += 50;
-                    BoostPWM_SetVoltageTarget(s_command.voltage);
+                    s_settings.voltage += 50;
+                    BoostPWM_SetVoltageTarget(s_settings.voltage);
                 }
                 break;
             case '-':
                 if (s_state.ccMode)
                 {
-                    s_command.current -= 25;
-                    BoostPWM_SetCurrentLimit(s_command.current);
+                    s_settings.current -= 25;
+                    BoostPWM_SetCurrentLimit(s_settings.current);
                 }
                 else
                 {
-                    s_command.voltage -= 50;
-                    BoostPWM_SetVoltageTarget(s_command.voltage);
+                    s_settings.voltage -= 50;
+                    BoostPWM_SetVoltageTarget(s_settings.voltage);
                 }
                 break;
             case -1:
@@ -210,17 +250,20 @@ int main(void)
             case 'v':
                 s_state.ccMode = false;
                 break;
+            case 's':
+                s_settings.save = true;
+                break;
             default:
                 if (c <= '0' || c > '9') break;
                 if (s_state.ccMode)
                 {
-                    s_command.current = (c - '0') * 100;
-                    BoostPWM_SetCurrentLimit(s_command.current);
+                    s_settings.current = (c - '0') * 100;
+                    BoostPWM_SetCurrentLimit(s_settings.current);
                 }
                 else
                 {
-                    s_command.voltage = (c - '0') * 1000;
-                    BoostPWM_SetVoltageTarget(s_command.voltage);
+                    s_settings.voltage = (c - '0') * 1000;
+                    BoostPWM_SetVoltageTarget(s_settings.voltage);
                 }
                 break;
         }
@@ -362,11 +405,14 @@ void usb_handle_user_data(struct usb_endpoint *e, int current_endpoint, uint8_t 
         const uint8_t cmd = data[1];
         switch (cmd)
         {
-            case 1:
-                s_command.voltage = *(uint32_t *)(data + 2);
+            case CMD_SET_VOLTAGE:
+                s_settings.voltage = *(uint32_t *)(data + 2);
                 break;
-            case 2:
-                s_command.current = *(uint32_t *)(data + 2);
+            case CMD_SET_CURRENT:
+                s_settings.current = *(uint32_t *)(data + 2);
+                break;
+            case CMD_SAVE:
+                s_settings.save = true;
                 break;
         }
 

@@ -23,6 +23,12 @@ var STATS = true;
 // Module type definitions
 //------------------------------------------------------------------------------
 
+class CommandID {
+    static VOLTAGE = 1;
+    static CURRENT = 2;
+    static SAVE = 3;
+}
+
 class PowerSupplyState {
     constructor(data) {
         if (data instanceof Uint8Array) {
@@ -325,7 +331,7 @@ async function sendCommand(dev, command) {
 async function setVoltage(voltage) {
     if (dev) {
         const command = new Uint8Array(BOOST_REPORT_SIZE - 1);
-        command[0] = 1;
+        command[0] = CommandID.VOLTAGE;
         writeU32LE(command, 1, voltage);
         await dev.sendFeatureReport(0xAA, command);
     }
@@ -339,8 +345,20 @@ async function setVoltage(voltage) {
 async function setCurrent(current) {
     if (dev) {
         const command = new Uint8Array(BOOST_REPORT_SIZE - 1);
-        command[0] = 2;
+        command[0] = CommandID.CURRENT;
         writeU32LE(command, 1, current);
+        await dev.sendFeatureReport(0xAA, command);
+    }
+}
+
+/**
+ * @brief  Save Settings
+ * @return None
+ */
+async function saveSettings() {
+    if (dev) {
+        const command = new Uint8Array(BOOST_REPORT_SIZE - 1);
+        command[0] = CommandID.SAVE;
         await dev.sendFeatureReport(0xAA, command);
     }
 }

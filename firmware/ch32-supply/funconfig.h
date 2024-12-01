@@ -4,7 +4,7 @@
 // Must be a multiple of 8
 #define BOOST_REPORT_SIZE (8)
 
-#define CONFIG_DEBUG_ENABLE_LOGS 0
+#define CONFIG_DEBUG_ENABLE_LOGS 1
 
 // Though this should be on by default we can extra force it on.
 #define FUNCONF_USE_DEBUGPRINTF 1

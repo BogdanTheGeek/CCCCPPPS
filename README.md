@@ -8,14 +8,12 @@ of being cheap, crappy, but very useful!
 ![PCB_Schem](/PCB/MkII/Schematic.png)  
 
 # Usage
+## Web UI
+https://bogdanthegeek.github.io/CCCCPPPS/software/webui/index.html
 ## Debug Interface:
 This interface is enabled by default when building the firmware. Use `minichlink`
 to issue commands listed below
 
-## USB Interface:
-Build with `-DCONFIG_USE_USB`
-> [!NOTE]
-> To be implemented.
 
 ## Commands
 > [!NOTE]

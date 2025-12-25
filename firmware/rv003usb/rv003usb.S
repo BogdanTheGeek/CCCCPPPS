@@ -1,6 +1,6 @@
 // Test
 
-#include "ch32v003fun.h"
+#include "ch32fun.h"
 #include "rv003usb.h"
 
 #define CFGLR_OFFSET 0

@@ -15,7 +15,7 @@
 #include <stdbool.h>
 
 #include "boost.h"
-#include "ch32v003fun.h"
+#include "ch32fun.h"
 #include "log.h"
 #include "nvs.h"
 #include "rv003usb.h"
@@ -286,7 +286,7 @@ static void SysTick_Init(void)
     SysTick->CTLR = 0;
 
     // Enable the SysTick IRQ
-    NVIC_EnableIRQ(SysTicK_IRQn);
+    NVIC_EnableIRQ(SysTick_IRQn);
 
     // Set the tick interval to 1ms for normal op
     SysTick->CMP = (FUNCONF_SYSTEM_CORE_CLOCK / 1000) - 1;

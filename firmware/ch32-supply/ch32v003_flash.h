@@ -57,7 +57,7 @@
  */
 #ifndef CH32V003_FLASH_H
 #define CH32V003_FLASH_H
-#include "ch32v003fun.h"
+#include "ch32fun.h"
 #include <stdint.h> // for uintN_t type support
 /**
  * @brief Calculate the runtime address for nonvolatile storage.
